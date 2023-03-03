@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -48,9 +47,7 @@ func main() {
 
 	for update := range updates {
 		if update.Message != nil {
-			s, _ := json.Marshal(update.Message.Entities)
-			fmt.Println(string(s))
-			if update.Message.Entities[0].Type == "bot_command" {
+			if len(update.Message.Entities) > 0 && update.Message.Entities[0].Type == "bot_command" {
 				var commandClear []string
 				command := strings.Split(update.Message.Text, " ")
 				for _, j := range command {
@@ -63,68 +60,183 @@ func main() {
 					case "/start":
 						msg := tgbotapi.NewMessage(update.Message.Chat.ID, strings.Join([]string{
 							"透過 Telegram Bot 創建提醒事項\n",
-							"/add\\_reminder `2-26(可省略)` `11:20` `提醒文本`",
-							"/add\\_reminder\\_month `日 (數字)` `11:20` `提醒文本`",
+							"列出所有提醒: /my\\_reminders",
+							"新增提醒: /add\\_reminder `2-26(可省略)` `11:20` `提醒文本`",
+							"新增每月提醒: /add\\_reminder\\_month `日(數字)` `11:20` `提醒文本`",
 							"\nGitHub: https://github\\.com/ArsFy/reminder\\-bot",
 						}, "\n"))
 						msg.ParseMode = "MarkdownV2"
 						msg.ReplyToMessageID = update.Message.MessageID
 						MsgErr(Bot.Send(msg))
-					case "/add_reminder":
-						if len(commandClear) >= 3 {
-							var day, thisTime [2]int
-							if strings.Contains(commandClear[1], "-") {
-								dayList := strings.Split(commandClear[1], "-")
-								if len(dayList) == 2 {
-									day = [2]int{Int(dayList[0]), Int(dayList[1])}
-									if strings.Contains(commandClear[2], ":") {
-										timeList := strings.Split(commandClear[2], ":")
-										if len(timeList) == 2 {
-											thisTime = [2]int{Int(timeList[0]), Int(timeList[1])}
-										} else {
-											ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "時間格式錯誤: /add_reminder 2-26 11:20 提醒文本")
-										}
-									}
-								} else {
-									ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "日期格式錯誤: /add_reminder 2-26 11:20 提醒文本")
-								}
-							} else {
-								timeList := strings.Split(commandClear[1], ":")
-								if len(timeList) == 2 {
-									thisTime = [2]int{Int(timeList[0]), Int(timeList[1])}
-									now := time.Now()
-									if thisTime[0] < now.Hour() || (thisTime[0] == now.Hour() && thisTime[1] < now.Minute()) {
-										now = time.Now().Add(time.Hour * 24)
-										dayList := strings.Split(now.Format("01-02"), "-")
-										day = [2]int{Int(dayList[0]), Int(dayList[1])}
-									}
-								} else {
-									ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "時間格式錯誤: /add_reminder 2-26 11:20 提醒文本")
-								}
+					case "/my_reminders":
+						var rList [][]tgbotapi.InlineKeyboardButton = [][]tgbotapi.InlineKeyboardButton{}
+						for i, j := range cronCache {
+							if j.UserId == update.Message.From.ID {
+								tL := strings.Split(j.Cron, " ")
+								rList = append(rList, tgbotapi.NewInlineKeyboardRow(
+									tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), "remove_"+i),
+								))
 							}
-							if CheckTime(day, thisTime) {
-								fmt.Println(day, thisTime)
-								// addCron
+						}
+						msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("↓ 你有 %d 個提醒事件", len(rList)))
+						msg.ReplyToMessageID = update.Message.MessageID
+						if len(rList) > 0 {
+							msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rList...)
+						}
+						Bot.Send(msg)
+					case "/add_reminder":
+						if len(commandClear) > 2 {
+							testText := strings.Join(commandClear[1:], ",")
+							var tstru TimeType
+							var content string
+							if Dtime.MatchString(testText) {
+								tstri := Dtime.FindStringSubmatch(testText)
+								tstru = TimeType{
+									Month:  Int(tstri[1]),
+									Day:    Int(tstri[2]),
+									Hour:   Int(tstri[3]),
+									Minute: Int(tstri[4]),
+								}
+								content = tstri[5]
+							} else if Htime.MatchString(testText) {
+								now := time.Now()
+								tstri := Htime.FindStringSubmatch(testText)
+								fmt.Println(tstri)
+								if Int(tstri[1]) < now.Hour() || (Int(tstri[1]) == now.Hour() && Int(tstri[2]) < now.Minute()) {
+									now = time.Now().Add(time.Hour * 24)
+								}
+								tstru = TimeType{
+									Month:  int(now.Month()),
+									Day:    now.Day(),
+									Hour:   Int(tstri[1]),
+									Minute: Int(tstri[2]),
+								}
+								content = tstri[3]
 							} else {
-								ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "時間超出範圍: /add_reminder 2023-2-26 11:20 提醒文本")
+								ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "時間格式錯誤: /add_reminder 2023-2-26 11:20 提醒文本")
+								return
+							}
+							if CheckTime(tstru) {
+								username := GetUser(update.Message.From)
+								id := addCron(tstru, update.Message.Chat.ID, fmt.Sprintf(
+									"%s 事件提醒\n設定時間: %s\n觸發時間: %d\\-%s\\-%s %s:%s\n提醒內容: %s",
+									username,
+									time.Now().Format("2006\\-01\\-02 15:04"),
+									time.Now().Year(),
+									AddZero(tstru.Month), AddZero(tstru.Day), AddZero(tstru.Hour), AddZero(tstru.Minute),
+									content,
+								), update.Message.From.ID, 0)
+								sendmsg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+									"設定新提醒\n觸發時間: %d-%s-%s %s:%s\n提醒內容: %s",
+									time.Now().Year(),
+									AddZero(tstru.Month), AddZero(tstru.Day), AddZero(tstru.Hour), AddZero(tstru.Minute),
+									content,
+								))
+								sendmsg.ReplyToMessageID = update.Message.MessageID
+								sendmsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+									tgbotapi.NewInlineKeyboardRow(
+										tgbotapi.NewInlineKeyboardButtonData("× 取消", "remove_"+id),
+									),
+								)
+								MsgErr(Bot.Send(sendmsg))
+							} else {
+								ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "錯誤: 時間超出範圍/已過期")
 							}
 						} else {
 							ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "缺少參數: /add_reminder 2023-2-26 11:20 提醒文本")
+						}
+					case "/add_reminder_month":
+						if len(commandClear) == 4 {
+							testText := strings.Join(commandClear[1:], ",")
+							if Mtime.MatchString(testText) {
+								tstri := Mtime.FindStringSubmatch(testText)
+								tstru := TimeType{
+									Month:  12,
+									Day:    Int(tstri[1]),
+									Hour:   Int(tstri[2]),
+									Minute: Int(tstri[3]),
+								}
+
+								if CheckTime(tstru) {
+									username := GetUser(update.Message.From)
+									id := addCron(tstru, update.Message.Chat.ID, fmt.Sprintf(
+										"%s 事件提醒\n設定時間: %s\n觸發時間: 每月 %s 日 %s:%s\n提醒內容: %s",
+										username,
+										time.Now().Format("2006\\-01\\-02 15:04"),
+										AddZero(tstru.Day), AddZero(tstru.Hour), AddZero(tstru.Minute),
+										tstri[4],
+									), update.Message.From.ID, 1)
+									sendmsg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+										"設定新每月提醒\n觸發時間: 每月 %s 日 %s:%s\n提醒內容: %s",
+										AddZero(tstru.Day), AddZero(tstru.Hour), AddZero(tstru.Minute),
+										tstri[4],
+									))
+									sendmsg.ReplyToMessageID = update.Message.MessageID
+									sendmsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+										tgbotapi.NewInlineKeyboardRow(
+											tgbotapi.NewInlineKeyboardButtonData("× 取消", "remove_"+id),
+										),
+									)
+									MsgErr(Bot.Send(sendmsg))
+								} else {
+									ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "錯誤: 時間超出範圍")
+								}
+							} else {
+								ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "時間格式錯誤: /add_reminder_month 26 11:20 提醒文本")
+							}
+						} else {
+							ReplyMsg(update.Message.Chat.ID, update.Message.MessageID, "缺少參數: /add_reminder_month 26 11:20 提醒文本")
 						}
 					}
 				}
 			}
 		} else if update.CallbackQuery != nil {
-			switch update.CallbackQuery.Data {
-			case "pass":
-				// callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "Pass")
-				// if _, err := Bot.Request(callback); err != nil {
-				// 	panic(err)
-				// }
-				// delmsg := tgbotapi.NewDeleteMessage(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID)
-				// if _, err := Bot.Request(delmsg); err != nil {
-				// 	panic(err)
-				// }
+			commList := strings.Split(update.CallbackQuery.Data, "_")
+			switch commList[0] {
+			case "remove":
+				if cronTask[commList[1]] != nil {
+					cronTask[commList[1]].Stop()
+				}
+				delete(cronTask, commList[1])
+				delete(cronCache, commList[1])
+				UpCache()
+				callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "已取消")
+				if _, err := Bot.Request(callback); err != nil {
+					panic(err)
+				}
+				if !strings.Contains(update.CallbackQuery.Message.Text, "↓") {
+					editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, "提醒已取消")
+					if _, err := Bot.Request(editmsg); err != nil {
+						panic(err)
+					}
+				} else {
+					var rList [][]tgbotapi.InlineKeyboardButton = [][]tgbotapi.InlineKeyboardButton{}
+					for i, j := range cronCache {
+						if j.UserId == update.Message.From.ID {
+							tL := strings.Split(j.Cron, " ")
+							rList = append(rList, tgbotapi.NewInlineKeyboardRow(
+								tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), "remove_"+i),
+							))
+						}
+					}
+					editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, fmt.Sprintf("↓ 你有 %d 個提醒事件", len(rList)))
+					if _, err := Bot.Request(editmsg); err != nil {
+						panic(err)
+					}
+					if len(rList) > 0 {
+						editmsg2 := tgbotapi.NewEditMessageReplyMarkup(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, tgbotapi.NewInlineKeyboardMarkup(rList...))
+						if _, err := Bot.Request(editmsg2); err != nil {
+							panic(err)
+						}
+					}
+				}
+				go func(cq *tgbotapi.CallbackQuery) {
+					time.Sleep(time.Minute)
+					delmsg := tgbotapi.NewDeleteMessage(cq.Message.Chat.ID, cq.Message.MessageID)
+					if _, err := Bot.Request(delmsg); err != nil {
+						panic(err)
+					}
+				}(update.CallbackQuery)
 			}
 		}
 	}

@@ -7,6 +7,10 @@
 
 ## How to Use
 
+- 列出所有提醒:  `/my_reminders`
+- 新增提醒:     `/add_reminder` `2-26(可省略)` `11:20` `提醒文本`
+- 新增每月提醒:  `/add_reminder_month` `日 (數字)` `11:20` `提醒文本`
+
 
 ## Deploy
 

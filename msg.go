@@ -8,7 +8,10 @@ func ReplyMsg(chatId int64, replyId int, msg string) {
 	MsgErr(Bot.Send(sendmsg))
 }
 
-func SendMsg(chatId int64, msg string) {
+func SendMsg(chatId int64, msg string, md bool) {
 	sendmsg := tgbotapi.NewMessage(chatId, msg)
+	if md {
+		sendmsg.ParseMode = "MarkdownV2"
+	}
 	MsgErr(Bot.Send(sendmsg))
 }
