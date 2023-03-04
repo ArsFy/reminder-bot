@@ -74,7 +74,7 @@ func main() {
 							if j.UserId == update.Message.From.ID {
 								tL := strings.Split(j.Cron, " ")
 								rList = append(rList, tgbotapi.NewInlineKeyboardRow(
-									tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), "remove_"+i),
+									tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), fmt.Sprintf("remove_%s_%d", i, update.Message.From.ID)),
 								))
 							}
 						}
@@ -135,7 +135,7 @@ func main() {
 								sendmsg.ReplyToMessageID = update.Message.MessageID
 								sendmsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 									tgbotapi.NewInlineKeyboardRow(
-										tgbotapi.NewInlineKeyboardButtonData("× 取消", "remove_"+id),
+										tgbotapi.NewInlineKeyboardButtonData("× 取消", fmt.Sprintf("remove_%s_%d", id, update.Message.From.ID)),
 									),
 								)
 								MsgErr(Bot.Send(sendmsg))
@@ -174,7 +174,7 @@ func main() {
 									sendmsg.ReplyToMessageID = update.Message.MessageID
 									sendmsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 										tgbotapi.NewInlineKeyboardRow(
-											tgbotapi.NewInlineKeyboardButtonData("× 取消", "remove_"+id),
+											tgbotapi.NewInlineKeyboardButtonData("× 取消", fmt.Sprintf("remove_%s_%d", id, update.Message.From.ID)),
 										),
 									)
 									MsgErr(Bot.Send(sendmsg))
@@ -194,49 +194,56 @@ func main() {
 			commList := strings.Split(update.CallbackQuery.Data, "_")
 			switch commList[0] {
 			case "remove":
-				if cronTask[commList[1]] != nil {
-					cronTask[commList[1]].Stop()
-				}
-				delete(cronTask, commList[1])
-				delete(cronCache, commList[1])
-				UpCache()
-				callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "已取消")
-				if _, err := Bot.Request(callback); err != nil {
-					panic(err)
-				}
-				if !strings.Contains(update.CallbackQuery.Message.Text, "↓") {
-					editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, "提醒已取消")
-					if _, err := Bot.Request(editmsg); err != nil {
+				if len(commList) == 3 && commList[2] == fmt.Sprint(update.CallbackQuery.From.ID) {
+					if cronTask[commList[1]] != nil {
+						cronTask[commList[1]].Stop()
+					}
+					delete(cronTask, commList[1])
+					delete(cronCache, commList[1])
+					UpCache()
+					callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "已取消")
+					if _, err := Bot.Request(callback); err != nil {
 						panic(err)
 					}
-				} else {
-					var rList [][]tgbotapi.InlineKeyboardButton = [][]tgbotapi.InlineKeyboardButton{}
-					for i, j := range cronCache {
-						if j.UserId == update.Message.From.ID {
-							tL := strings.Split(j.Cron, " ")
-							rList = append(rList, tgbotapi.NewInlineKeyboardRow(
-								tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), "remove_"+i),
-							))
-						}
-					}
-					editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, fmt.Sprintf("↓ 你有 %d 個提醒事件", len(rList)))
-					if _, err := Bot.Request(editmsg); err != nil {
-						panic(err)
-					}
-					if len(rList) > 0 {
-						editmsg2 := tgbotapi.NewEditMessageReplyMarkup(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, tgbotapi.NewInlineKeyboardMarkup(rList...))
-						if _, err := Bot.Request(editmsg2); err != nil {
+					if !strings.Contains(update.CallbackQuery.Message.Text, "↓") {
+						editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, "提醒已取消")
+						if _, err := Bot.Request(editmsg); err != nil {
 							panic(err)
 						}
+					} else {
+						var rList [][]tgbotapi.InlineKeyboardButton = [][]tgbotapi.InlineKeyboardButton{}
+						for i, j := range cronCache {
+							if j.UserId == update.Message.From.ID {
+								tL := strings.Split(j.Cron, " ")
+								rList = append(rList, tgbotapi.NewInlineKeyboardRow(
+									tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("刪除 %s-%s %s:%s %s", AddZeroStr(tL[3]), AddZeroStr(tL[2]), AddZeroStr(tL[1]), AddZeroStr(tL[0]), strings.Split(j.Msg, "提醒內容: ")[1]), fmt.Sprintf("remove_%s_%d", i, update.Message.From.ID)),
+								))
+							}
+						}
+						editmsg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, fmt.Sprintf("↓ 你有 %d 個提醒事件", len(rList)))
+						if _, err := Bot.Request(editmsg); err != nil {
+							panic(err)
+						}
+						if len(rList) > 0 {
+							editmsg2 := tgbotapi.NewEditMessageReplyMarkup(update.CallbackQuery.Message.Chat.ID, update.CallbackQuery.Message.MessageID, tgbotapi.NewInlineKeyboardMarkup(rList...))
+							if _, err := Bot.Request(editmsg2); err != nil {
+								panic(err)
+							}
+						}
 					}
-				}
-				go func(cq *tgbotapi.CallbackQuery) {
-					time.Sleep(time.Minute)
-					delmsg := tgbotapi.NewDeleteMessage(cq.Message.Chat.ID, cq.Message.MessageID)
-					if _, err := Bot.Request(delmsg); err != nil {
+					go func(cq *tgbotapi.CallbackQuery) {
+						time.Sleep(time.Minute)
+						delmsg := tgbotapi.NewDeleteMessage(cq.Message.Chat.ID, cq.Message.MessageID)
+						if _, err := Bot.Request(delmsg); err != nil {
+							panic(err)
+						}
+					}(update.CallbackQuery)
+				} else {
+					callback := tgbotapi.NewCallback(update.CallbackQuery.ID, "只允許設定自己的提醒事件")
+					if _, err := Bot.Request(callback); err != nil {
 						panic(err)
 					}
-				}(update.CallbackQuery)
+				}
 			}
 		}
 	}
