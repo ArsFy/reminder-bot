@@ -77,7 +77,7 @@ func main() {
 							"\nGitHub: https://github\\.com/ArsFy/reminder\\-bot",
 						}
 						if timeZoneSet != 100 {
-							msgArr = append(msgArr, []string{"", fmt.Sprintf("這個 Bot 現在運行在 UTC%s%d", Operator3(timeZoneSet <= 0, "-", ""), timeZoneSet)}...)
+							msgArr = append(msgArr, []string{"", fmt.Sprintf("這個 Bot 現在運行在 UTC%s%d", Operator3(timeZoneSet <= 0, "-", "+"), timeZoneSet)}...)
 						}
 						msg := tgbotapi.NewMessage(update.Message.Chat.ID, strings.Join(msgArr, "\n"))
 						msg.ParseMode = "MarkdownV2"
