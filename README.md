@@ -30,6 +30,9 @@ go build .
 2. 配置 Token，你可以透過下面 2 種方式之一進行配置
     - **Env (環境變數):** 設定環境變數名稱 `BOT_TOKEN`
     - **Config (配置檔案):** 在運行目錄下創建配置檔 `./token.conf`，內容為 Bot Token
+3. *(可選) 使用 Env 設定時區
+    - 設定環境變數名稱 `TIMEZONE`:
+    - UTC+8: `8`, UTC-10: `-10` 
 
 ### 3. Run
 

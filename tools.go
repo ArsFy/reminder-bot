@@ -67,3 +67,11 @@ func GetUser(user *tgbotapi.User) string {
 	}
 	return username
 }
+
+func Operator3(b bool, a, c string) string {
+	if b {
+		return a
+	} else {
+		return c
+	}
+}

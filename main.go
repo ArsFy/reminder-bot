@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 )
 
 var BotToken string
+var timeZoneSet int = 100
 var BotInfo tgbotapi.User
 var Bot *tgbotapi.BotAPI
 
@@ -25,6 +27,15 @@ func init() {
 	} else if !strings.Contains(BotToken, ":") {
 		fmt.Println("EnvErr:", "You must set a Bot Token: https://github.com/ArsFy/reminder-bot/blob/main/README.md#bottoken")
 		os.Exit(1)
+	}
+
+	timeZone := os.Getenv("TIMEZONE")
+	if timeZone != "" {
+		timeZoneNum, err := strconv.Atoi(timeZone)
+		if err == nil && timeZoneNum > -13 && timeZoneNum < 13 {
+			time.FixedZone("UTC", timeZoneNum*3600)
+			timeZoneSet = timeZoneNum
+		}
 	}
 }
 
@@ -58,13 +69,17 @@ func main() {
 				if len(commandClear) > 0 {
 					switch strings.Replace(commandClear[0], "@"+BotInfo.UserName, "", 1) {
 					case "/start":
-						msg := tgbotapi.NewMessage(update.Message.Chat.ID, strings.Join([]string{
+						msgArr := []string{
 							"透過 Telegram Bot 創建提醒事項\n",
 							"列出所有提醒: /my\\_reminders",
 							"新增提醒: /add\\_reminder `2-26(可省略)` `11:20` `提醒文本`",
 							"新增每月提醒: /add\\_reminder\\_month `日(數字)` `11:20` `提醒文本`",
 							"\nGitHub: https://github\\.com/ArsFy/reminder\\-bot",
-						}, "\n"))
+						}
+						if timeZoneSet != 100 {
+							msgArr = append(msgArr, []string{"", fmt.Sprintf("這個 Bot 現在運行在 UTC%s%d", Operator3(timeZoneSet <= 0, "-", ""), timeZoneSet)}...)
+						}
+						msg := tgbotapi.NewMessage(update.Message.Chat.ID, strings.Join(msgArr, "\n"))
 						msg.ParseMode = "MarkdownV2"
 						msg.ReplyToMessageID = update.Message.MessageID
 						MsgErr(Bot.Send(msg))
@@ -101,7 +116,6 @@ func main() {
 							} else if Htime.MatchString(testText) {
 								now := time.Now()
 								tstri := Htime.FindStringSubmatch(testText)
-								fmt.Println(tstri)
 								if Int(tstri[1]) < now.Hour() || (Int(tstri[1]) == now.Hour() && Int(tstri[2]) < now.Minute()) {
 									now = time.Now().Add(time.Hour * 24)
 								}
